@@ -1062,6 +1062,20 @@ class ContainerTest extends TestCase
         $this->assertEquals('laurence', $instance->something);
     }
 
+    /**
+     * @Subject
+     */
+    public function testManyResolvingWithUsingAnInterface()
+    {
+        $container = new Container;
+        $container->bind(IContainerContractStub::class, ContainerInjectVariableStubWithInterfaceImplementation::class);
+
+        for($i = 0; $i < 1000; $i++)
+            $instance = $container->make(IContainerContractStub::class, ['something' => 'laurence', 'ctr' => $i]);
+
+        $this->assertEquals('laurence', $instance->something);
+    }
+
     public function testNestedParameterOverride()
     {
         $container = new Container;
