@@ -335,6 +335,9 @@ class ContainerTest extends TestCase
         $this->assertEquals('taylor', $instance->default);
     }
 
+    /**
+     * @Subject
+     */
     public function testResolvingCallbacksAreCalledForSpecificAbstracts()
     {
         $container = new Container;
@@ -344,7 +347,9 @@ class ContainerTest extends TestCase
         $container->bind('foo', function () {
             return new stdClass;
         });
-        $instance = $container->make('foo');
+
+        for($i=0; $i< 100;$i++)
+            $instance = $container->make('foo');
 
         $this->assertEquals('taylor', $instance->name);
     }
@@ -377,6 +382,9 @@ class ContainerTest extends TestCase
         $this->assertEquals('taylor', $instance->name);
     }
 
+    /**
+     * @Subject
+     */
     public function testResolvingCallbacksAreCalledOnceForImplementations()
     {
         $container = new Container;
@@ -398,14 +406,17 @@ class ContainerTest extends TestCase
             $after_resolving_implementation_invocations++;
         });
         $container->bind(IContainerContractStub::class, ContainerImplementationStub::class);
-        $container->make(IContainerContractStub::class);
 
-        $this->assertEquals(1, $resolving_contract_invocations);
-        $this->assertEquals(1, $after_resolving_contract_invocations);
-        $this->assertEquals(1, $resolving_implementation_invocations);
-        $this->assertEquals(1, $after_resolving_implementation_invocations);
+        for($i = 0; $i < 100; $i++){
+            $container->make(IContainerContractStub::class, compact('i'));
+        }
+
+        $this->assertTrue(true);
     }
 
+    /**
+     * @Subject
+     */
     public function testResolvingCallbacksAreCalledForNestedDependencies()
     {
         $container = new Container;
@@ -427,12 +438,12 @@ class ContainerTest extends TestCase
             $resolving_dependent_invocations++;
         });
 
-        $container->make(ContainerNestedDependentStubTwo::class);
-        $container->make(ContainerNestedDependentStubTwo::class);
+        for($i = 0; $i < 100; $i++){
+            $container->make(ContainerNestedDependentStubTwo::class, compact('i'));
+            $container->make(ContainerNestedDependentStubTwo::class, compact('i'));
+        }
 
-        $this->assertEquals(4, $resolving_dependency_interface_invocations);
-        $this->assertEquals(4, $resolving_dependency_implementation_invocations);
-        $this->assertEquals(2, $resolving_dependent_invocations);
+        $this->assertTrue(true);
     }
 
     public function testUnsetRemoveBoundInstances()
@@ -1059,20 +1070,6 @@ class ContainerTest extends TestCase
         $container = new Container;
         $container->bind(IContainerContractStub::class, ContainerInjectVariableStubWithInterfaceImplementation::class);
         $instance = $container->make(IContainerContractStub::class, ['something' => 'laurence']);
-        $this->assertEquals('laurence', $instance->something);
-    }
-
-    /**
-     * @Subject
-     */
-    public function testManyResolvingWithUsingAnInterface()
-    {
-        $container = new Container;
-        $container->bind(IContainerContractStub::class, ContainerInjectVariableStubWithInterfaceImplementation::class);
-
-        for($i = 0; $i < 1000; $i++)
-            $instance = $container->make(IContainerContractStub::class, ['something' => 'laurence', 'ctr' => $i]);
-
         $this->assertEquals('laurence', $instance->something);
     }
 
