@@ -708,7 +708,7 @@ class DatabaseEloquentIntegrationTest extends TestCase
         $user = EloquentTestUser::create(['id' => 1, 'email' => 'taylorotwell@gmail.com']);
 
         $user->posts()->create(['name' => 'Post 2'])
-             ->photos()->create(['name' => 'photo.jpg']);
+            ->photos()->create(['name' => 'photo.jpg']);
 
         $query = EloquentTestUser::has('postWithPhotos');
 
@@ -921,6 +921,26 @@ class DatabaseEloquentIntegrationTest extends TestCase
         $model->update(['json->a->b' => '3']);
         $this->assertArrayNotHasKey('json->a->b', $model->toArray());
         $this->assertEquals(['x' => 0, 'y' => 1, 'a' => ['b' => 3]], $model->json);
+    }
+
+    public function testSavingCastedJSONFields()
+    {
+        $model = EloquentTestWithCastedJSON::create(['json' => ['x' => '1']]);
+        $this->assertSame(['x' => 1], $model->json);
+
+        $model->fillable(['json->y', 'json->z', 'json->a->b', 'json->a->c']);
+
+        $model->update(['json->y' => 1]);
+        $this->assertSame(['x' => 1, 'y' => '1'], $model->json);
+
+        $model->update(['json->z' => 1]);
+        $this->assertSame(['x' => 1, 'y' => '1', 'z' => true], $model->json);
+
+        $model->update(['json->a->b' => [3, 4, 5]]);
+        $this->assertSame(['x' => 1, 'y' => '1', 'z' => true, 'a' => ['b' => [3, 4, 5]]], $model->json);
+
+        $model->update(['json->a->c' => 3.1415]);
+        $this->assertSame(['x' => 1, 'y' => '1', 'z' => true, 'a' => ['b' => [3, 4, 5], 'c' => '3.14']], $model->json);
     }
 
     /**
@@ -1629,7 +1649,7 @@ class EloquentTestUserWithCustomFriendPivot extends EloquentTestUser
     public function friends()
     {
         return $this->belongsToMany(EloquentTestUser::class, 'friends', 'user_id', 'friend_id')
-                        ->using(EloquentTestFriendPivot::class)->withPivot('user_id', 'friend_id', 'friend_level_id');
+            ->using(EloquentTestFriendPivot::class)->withPivot('user_id', 'friend_id', 'friend_level_id');
     }
 }
 
@@ -1764,6 +1784,24 @@ class EloquentTestWithJSON extends Eloquent
     public $timestamps = false;
     protected $casts = [
         'json' => 'array',
+    ];
+}
+
+class EloquentTestWithCastedJSON extends Eloquent
+{
+    protected $guarded = [];
+    protected $table = 'with_json';
+    public $timestamps = false;
+    protected $casts = [
+        'json' => [
+            'x' => 'int',
+            'y' => 'string',
+            'z' => 'boolean',
+            'a' => [
+                'b' => 'array',
+                'c' => 'decimal:2',
+            ]
+        ],
     ];
 }
 
