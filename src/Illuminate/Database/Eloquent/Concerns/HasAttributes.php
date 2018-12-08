@@ -347,8 +347,8 @@ trait HasAttributes
         // If the attribute exists within the cast array, we will convert it to
         // an appropriate native PHP type dependant upon the associated value
         // given with the key in the pair. Dayle made this comment line up.
-        if ($this->hasCast($key)) {
-            return $this->castAttribute($key, $value);
+        if ($this->hasCast($key, $this->casts)) {
+            return $this->castAttribute($key, $value, $this->casts);
         }
 
         // If the attribute is listed as a date, we will convert it to a DateTime
@@ -463,15 +463,16 @@ trait HasAttributes
      *
      * @param  string  $key
      * @param  mixed  $value
+     * @param  array  $casts
      * @return mixed
      */
-    protected function castAttribute($key, $value)
+    protected function castAttribute($key, $value, array $casts)
     {
         if (is_null($value)) {
             return $value;
         }
 
-        switch ($this->getCastType($key)) {
+        switch ($this->getCastType($key, $casts)) {
             case 'int':
             case 'integer':
                 return (int) $value;
@@ -480,7 +481,7 @@ trait HasAttributes
             case 'double':
                 return $this->fromFloat($value);
             case 'decimal':
-                return $this->asDecimal($value, explode(':', $this->getCasts()[$key], 2)[1]);
+                return $this->asDecimal($value, explode(':', $this->getCasts($casts)[$key], 2)[1]);
             case 'string':
                 return (string) $value;
             case 'bool':
@@ -491,6 +492,8 @@ trait HasAttributes
             case 'array':
             case 'json':
                 return $this->fromJson($value);
+            case 'array_with_casts':
+                return $this->fromJsonWithCasts($value, $this->getCasts($casts)[$key]);
             case 'collection':
                 return new BaseCollection($this->fromJson($value));
             case 'date':
@@ -509,19 +512,24 @@ trait HasAttributes
      * Get the type of cast for a model attribute.
      *
      * @param  string  $key
+     * @param  array   $casts
      * @return string
      */
-    protected function getCastType($key)
+    protected function getCastType($key, array $casts)
     {
-        if ($this->isCustomDateTimeCast($this->getCasts()[$key])) {
+        if (is_array($this->getCasts($casts)[$key])) {
+            return 'array_with_casts';
+        }
+
+        if ($this->isCustomDateTimeCast($this->getCasts($casts)[$key])) {
             return 'custom_datetime';
         }
 
-        if ($this->isDecimalCast($this->getCasts()[$key])) {
+        if ($this->isDecimalCast($this->getCasts($casts)[$key])) {
             return 'decimal';
         }
 
-        return trim(strtolower($this->getCasts()[$key]));
+        return trim(strtolower($this->getCasts($casts)[$key]));
     }
 
     /**
@@ -532,8 +540,9 @@ trait HasAttributes
      */
     protected function isCustomDateTimeCast($cast)
     {
-        return strncmp($cast, 'date:', 5) === 0 ||
-               strncmp($cast, 'datetime:', 9) === 0;
+        return is_string($cast) &&
+             ( strncmp($cast, 'date:', 5) === 0 ||
+               strncmp($cast, 'datetime:', 9) === 0 );
     }
 
     /**
@@ -544,7 +553,7 @@ trait HasAttributes
      */
     protected function isDecimalCast($cast)
     {
-        return strncmp($cast, 'decimal:', 8) === 0;
+        return is_string($cast) && strncmp($cast, 'decimal:', 8) === 0;
     }
 
     /**
@@ -700,13 +709,38 @@ trait HasAttributes
     /**
      * Decode the given JSON back into an array or object.
      *
-     * @param  string  $value
+     * @param  mixed  $value
      * @param  bool  $asObject
      * @return mixed
      */
     public function fromJson($value, $asObject = false)
     {
-        return json_decode($value, ! $asObject);
+        if(is_string($value)){
+            $value = json_decode($value, ! $asObject);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Decode the given JSON back into an array or object.
+     * Then apply casts to the result.
+     *
+     * @param  string  $values
+     * @param  array  $casts
+     * @return mixed
+     */
+    public function fromJsonWithCasts($values, array $casts)
+    {
+        if(is_string($values)){
+            $values = json_decode($values, true);
+        }
+
+        foreach($values as $key => $value) {
+            $values[$key] = $this->castAttribute($key, $value, $casts);
+        }
+
+        return $values;
     }
 
     /**
@@ -885,13 +919,14 @@ trait HasAttributes
      * Determine whether an attribute should be cast to a native type.
      *
      * @param  string  $key
+     * @param  array   $casts
      * @param  array|string|null  $types
      * @return bool
      */
-    public function hasCast($key, $types = null)
+    public function hasCast($key, array $casts, $types = null)
     {
-        if (array_key_exists($key, $this->getCasts())) {
-            return $types ? in_array($this->getCastType($key), (array) $types, true) : true;
+        if (array_key_exists($key, $this->getCasts($casts))) {
+            return $types ? in_array($this->getCastType($key, $casts), (array) $types, true) : true;
         }
 
         return false;
@@ -900,15 +935,16 @@ trait HasAttributes
     /**
      * Get the casts array.
      *
+     * @param  array  $casts
      * @return array
      */
-    public function getCasts()
+    public function getCasts(array $casts)
     {
         if ($this->getIncrementing()) {
-            return array_merge([$this->getKeyName() => $this->getKeyType()], $this->casts);
+            return array_merge([$this->getKeyName() => $this->getKeyType()], $casts);
         }
 
-        return $this->casts;
+        return $casts;
     }
 
     /**
@@ -919,7 +955,7 @@ trait HasAttributes
      */
     protected function isDateCastable($key)
     {
-        return $this->hasCast($key, ['date', 'datetime']);
+        return $this->hasCast($key, $this->casts, ['date', 'datetime']);
     }
 
     /**
@@ -930,7 +966,7 @@ trait HasAttributes
      */
     protected function isJsonCastable($key)
     {
-        return $this->hasCast($key, ['array', 'json', 'object', 'collection']);
+        return $this->hasCast($key, $this->casts, ['array', 'array_with_casts', 'json', 'object', 'collection']);
     }
 
     /**
@@ -1157,9 +1193,9 @@ trait HasAttributes
         } elseif ($this->isDateAttribute($key)) {
             return $this->fromDateTime($current) ===
                    $this->fromDateTime($original);
-        } elseif ($this->hasCast($key)) {
-            return $this->castAttribute($key, $current) ===
-                   $this->castAttribute($key, $original);
+        } elseif ($this->hasCast($key, $this->casts)) {
+            return $this->castAttribute($key, $current, $this->casts) ===
+                   $this->castAttribute($key, $original, $this->casts);
         }
 
         return is_numeric($current) && is_numeric($original)
